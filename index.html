@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reyaz Store - Customer Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
+    <style>
+        body { background-color: #f3f4f6; }
+        .app-container { max-width: 480px; margin: 0 auto; background: white; min-height: 100vh; position: relative; padding-bottom: 70px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        .hidden { display: none !important; }
+        ::-webkit-scrollbar { display: none; }
+        
+        /* Modal Animation */
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .popup-animate { animation: popIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    
+    <div id="promo-popup" class="fixed inset-0 bg-black/60 z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-[350px] overflow-hidden popup-animate relative shadow-2xl">
+            <button onclick="closePopup()" class="absolute top-2 right-2 bg-black/50 text-white h-8 w-8 rounded-full flex items-center justify-center hover:bg-black z-10">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <img id="popup-img" src="" class="w-full h-48 object-cover hidden">
+            <div class="p-5 text-center">
+                <h2 id="popup-title" class="text-xl font-bold text-gray-800 mb-2"></h2>
+                <p id="popup-text" class="text-sm text-gray-600 mb-4"></p>
+                <a id="popup-link" href="#" target="_blank" onclick="closePopup()" class="inline-block w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition hidden">View Details</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="auth-view" class="p-6 flex flex-col justify-center min-h-screen bg-blue-50">
+        <div class="text-center mb-8">
+            <div class="bg-blue-600 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <i class="fa-solid fa-file-invoice text-3xl text-white"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-800">Reyaz Store</h1>
+            <p class="text-gray-500 mt-2">Your Digital Khata & Bills</p>
+        </div>
+
+        <div id="step-email" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+            <input type="text" id="user-name" class="w-full border border-gray-200 rounded-xl p-3 mb-4 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your name">
+            
+            <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+            <input type="email" id="user-email" class="w-full border border-gray-200 rounded-xl p-3 mb-4 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your email">
+            
+            <button onclick="sendOTP()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700">Login / Register</button>
+        </div>
+
+        <div id="step-otp" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hidden">
+            <p class="text-sm text-gray-600 mb-4 text-center">OTP sent to <span id="display-email" class="font-bold text-blue-600"></span></p>
+            <input type="text" id="user-otp" class="w-full border border-gray-200 rounded-xl p-3 mb-4 text-center tracking-widest text-xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="------" maxlength="6">
+            <button onclick="verifyOTP()" class="w-full bg-green-600 text-white font-bold py-3 rounded-xl shadow-md hover:bg-green-700">Verify & Enter</button>
+        </div>
+    </div>
+
+    <div id="main-app" class="hidden">
+        
+        <header class="bg-white p-4 sticky top-0 z-50 shadow-sm border-b border-gray-100">
+            <div class="flex justify-between items-center">
+                <div>
+                    <p class="text-xs text-gray-500">Welcome back,</p>
+                    <h2 class="text-lg font-bold text-gray-800 flex items-center gap-1">
+                        <span id="nav-user-name">...</span> 
+                        <i id="blue-tick" class="fa-solid fa-circle-check text-blue-500 text-sm hidden" title="Verified Customer"></i>
+                    </h2>
+                </div>
+                <div class="bg-gray-100 h-10 w-10 rounded-full flex items-center justify-center cursor-pointer" onclick="switchTab('profile')">
+                    <i class="fa-solid fa-user text-gray-600"></i>
+                </div>
+            </div>
+        </header>
+
+        <div id="red-alert" class="bg-red-600 text-white px-4 py-2 text-xs font-bold flex justify-between items-center hidden shadow-md">
+            <span><i class="fa-solid fa-triangle-exclamation mr-1"></i> <span id="red-alert-text"></span></span>
+            <button onclick="document.getElementById('red-alert').classList.add('hidden')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div id="home-view" class="p-4 view-tab">
+            
+            <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-5 text-white mb-6 shadow-lg">
+                <p class="text-sm text-gray-300 mb-1">Today's Transactions</p>
+                <div class="flex justify-between items-end">
+                    <h3 class="text-3xl font-bold" id="today-total">₹0</h3>
+                    <span class="bg-green-500/20 text-green-400 text-[10px] font-bold px-2 py-1 rounded-full"><i class="fa-solid fa-arrow-down mr-1"></i><span id="today-count">0</span> Bills</span>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-700 flex justify-between text-xs">
+                    <div><span class="text-gray-400">Total Pending:</span> <span class="font-bold text-red-400" id="total-pending">₹0</span></div>
+                    <button onclick="switchTab('bills')" class="text-blue-400 font-bold">View Khata ></button>
+                </div>
+            </div>
+
+            <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider">Recent Statements</h3>
+            <div class="space-y-3" id="home-statements">
+                <p class="text-center text-gray-400 text-sm py-4">Loading statements...</p>
+            </div>
+        </div>
+
+        <div id="bills-view" class="p-4 hidden view-tab">
+            <h3 class="font-bold text-gray-800 mb-4 text-xl">All Bills & Receipts</h3>
+            <div id="full-bill-list" class="space-y-3">
+                <p class="text-center text-gray-400 text-sm py-4">Loading bills...</p>
+            </div>
+        </div>
+
+        <div id="announcements-view" class="p-4 hidden view-tab bg-gray-50 min-h-screen">
+            <h3 class="font-bold text-gray-800 mb-4 text-xl">Store Updates</h3>
+            <div id="announcement-list" class="space-y-4">
+                <p class="text-center text-gray-400 text-sm py-4">Checking for updates...</p>
+            </div>
+        </div>
+
+        <div id="messages-view" class="hidden view-tab flex flex-col h-[calc(100vh-140px)] bg-gray-50">
+            <div class="p-4 border-b border-gray-200 bg-white">
+                <h3 class="font-bold text-gray-800 text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-headset text-blue-600"></i> Store Support
+                </h3>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-4 space-y-4" id="chat-window">
+                <p class="text-center text-gray-400 text-sm py-4">Loading chat history...</p>
+            </div>
+
+            <div class="p-3 bg-white border-t border-gray-200 flex gap-2">
+                <input type="text" id="chat-input" placeholder="Type a message..." class="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="sendMessage()" class="bg-blue-600 text-white h-10 w-10 rounded-full flex items-center justify-center shadow-md hover:bg-blue-700">
+                    <i class="fa-solid fa-paper-plane text-xs"></i>
+                </button>
+            </div>
+        </div>
+
+        <div id="profile-view" class="p-4 hidden view-tab">
+            <h3 class="font-bold text-gray-800 mb-4 text-xl">My Profile</h3>
+            
+            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm text-center mb-6">
+                <div class="h-20 w-20 bg-blue-100 rounded-full mx-auto flex items-center justify-center text-3xl text-blue-600 mb-3 relative">
+                    <i class="fa-solid fa-user"></i>
+                    <div id="profile-blue-tick" class="absolute bottom-0 right-0 bg-white rounded-full p-0.5 hidden">
+                        <i class="fa-solid fa-circle-check text-blue-500 text-lg"></i>
+                    </div>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800" id="profile-name">...</h2>
+                <p class="text-sm text-gray-500 mb-4" id="profile-email">...</p>
+                <span id="verification-badge" class="bg-gray-100 text-gray-600 border border-gray-200 px-3 py-1 rounded-full text-xs font-bold">Unverified</span>
+            </div>
+
+            <div class="space-y-3">
+                <div class="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-4">
+                    <div class="text-gray-400 w-6"><i class="fa-solid fa-phone"></i></div>
+                    <div class="flex-1">
+                        <p class="text-xs text-gray-400">Phone Number</p>
+                        <p class="text-sm font-medium" id="profile-phone">Not Provided</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border border-gray-100 flex items-center gap-4">
+                    <div class="text-gray-400 w-6"><i class="fa-solid fa-location-dot"></i></div>
+                    <div class="flex-1">
+                        <p class="text-xs text-gray-400">Delivery Address</p>
+                        <p class="text-sm font-medium" id="profile-address">Not Provided</p>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-4 rounded-xl border border-gray-100 flex items-center justify-between cursor-pointer text-red-500 mt-6" onclick="logout()">
+                    <span class="font-bold">Logout</span>
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </div>
+            </div>
+        </div>
+
+        <nav class="bg-white border-t border-gray-200 fixed bottom-0 w-full max-w-[480px] flex justify-between px-4 py-3 text-gray-400 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-50">
+            <button onclick="switchTab('home')" class="nav-btn flex flex-col items-center w-14 transition text-blue-600" data-target="home">
+                <i class="fa-solid fa-house text-xl mb-1"></i>
+                <span class="text-[10px] font-medium">Home</span>
+            </button>
+            <button onclick="switchTab('bills')" class="nav-btn flex flex-col items-center w-14 transition hover:text-blue-600" data-target="bills">
+                <i class="fa-solid fa-file-invoice text-xl mb-1"></i>
+                <span class="text-[10px] font-medium">Bills</span>
+            </button>
+            <button onclick="switchTab('announcements')" class="nav-btn flex flex-col items-center w-14 transition hover:text-blue-600" data-target="announcements">
+                <i class="fa-solid fa-bullhorn text-xl mb-1"></i>
+                <span class="text-[10px] font-medium">Alerts</span>
+            </button>
+            <button onclick="switchTab('messages')" class="nav-btn flex flex-col items-center w-14 transition hover:text-blue-600" data-target="messages">
+                <i class="fa-regular fa-message text-xl mb-1"></i>
+                <span class="text-[10px] font-medium">Chat</span>
+            </button>
+            <button onclick="switchTab('profile')" class="nav-btn flex flex-col items-center w-14 transition hover:text-blue-600" data-target="profile">
+                <i class="fa-solid fa-user text-xl mb-1"></i>
+                <span class="text-[10px] font-medium">Profile</span>
+            </button>
+        </nav>
+
+    </div>
+</div>
+
+<script>
+    // ================= CONFIGURATION =================
+    // FIREBASE CONFIG 
+    const firebaseConfig = {
+        apiKey: "AIzaSyAg-fFS2E8orVvSpUevG4X7BnNkAj3HMHU",
+        authDomain: "calling-app-aa853.firebaseapp.com",
+        databaseURL: "https://calling-app-aa853-default-rtdb.firebaseio.com",
+        projectId: "calling-app-aa853",
+        storageBucket: "calling-app-aa853.firebasestorage.app",
+        messagingSenderId: "181731059964",
+        appId: "1:181731059964:web:aef96a3d5bc429ee994f79"
+    };
+
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // EMAILJS CONFIG
+    emailjs.init("oX5p5o9ja1xghauIH"); 
+    const EMAILJS_SERVICE_ID = "service_oi1nj8m";
+    const EMAILJS_OTP_TEMPLATE = "template_8qw7srk";
+
+    let generatedOTP = "";
+    let currentUserEmail = "";
+
+    // ================= AUTH LOGIC =================
+    window.onload = () => {
+        const savedEmail = localStorage.getItem('reyaz_logged_in');
+        if(savedEmail) {
+            currentUserEmail = savedEmail;
+            showMainApp();
+        }
+    };
+
+    function sendOTP() {
+        const nameInput = document.getElementById('user-name').value;
+        const emailInput = document.getElementById('user-email').value;
+        
+        if (!nameInput || !emailInput.includes('@')) {
+            alert("Please enter a valid Name and Email."); return;
+        }
+
+        const btn = event.target;
+        btn.innerText = "Sending..."; btn.disabled = true;
+
+        currentUserEmail = emailInput;
+        generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_OTP_TEMPLATE, { to_email: currentUserEmail, otp: generatedOTP })
+            .then(function() {
+                // Pre-save user to DB (so Admin can see them)
+                db.collection('users').doc(currentUserEmail).set({
+                    name: nameInput,
+                    email: currentUserEmail,
+                    isVerified: false, // Default false, Admin changes this to true
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+
+                document.getElementById('display-email').innerText = currentUserEmail;
+                document.getElementById('step-email').classList.add('hidden');
+                document.getElementById('step-otp').classList.remove('hidden');
+            }).catch(err => {
+                alert("Failed to send OTP.");
+                btn.innerText = "Login / Register"; btn.disabled = false;
+            });
+    }
+
+    function verifyOTP() {
+        if (document.getElementById('user-otp').value === generatedOTP) {
+            localStorage.setItem('reyaz_logged_in', currentUserEmail);
+            showMainApp();
+        } else {
+            alert("Incorrect OTP.");
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem('reyaz_logged_in');
+        location.reload();
+    }
+
+    // ================= APP INITIALIZATION & FIREBASE LISTENERS =================
+    function showMainApp() {
+        document.getElementById('auth-view').classList.add('hidden');
+        document.getElementById('main-app').classList.remove('hidden');
+        
+        // Start live database listeners
+        listenToProfile();
+        listenToSettings();
+        listenToBills();
+        listenToAnnouncements();
+        listenToMessages();
+    }
+
+    // 1. Listen to Profile (For Name, Address, Blue Tick)
+    function listenToProfile() {
+        db.collection('users').doc(currentUserEmail).onSnapshot(doc => {
+            if (doc.exists) {
+                const data = doc.data();
+                document.getElementById('nav-user-name').innerText = data.name || 'User';
+                document.getElementById('profile-name').innerText = data.name || 'User';
+                document.getElementById('profile-email').innerText = data.email || currentUserEmail;
+                document.getElementById('profile-phone').innerText = data.phone || 'Not Provided';
+                document.getElementById('profile-address').innerText = data.address || 'Not Provided';
+
+                // Blue Tick Logic
+                if (data.isVerified) {
+                    document.getElementById('blue-tick').classList.remove('hidden');
+                    document.getElementById('profile-blue-tick').classList.remove('hidden');
+                    
+                    const badge = document.getElementById('verification-badge');
+                    badge.innerText = "Verified Customer";
+                    badge.className = "bg-blue-50 text-blue-600 border border-blue-200 px-3 py-1 rounded-full text-xs font-bold";
+                } else {
+                    document.getElementById('blue-tick').classList.add('hidden');
+                    document.getElementById('profile-blue-tick').classList.add('hidden');
+                }
+            }
+        });
+    }
+
+    // 2. Listen to Global Settings (Alerts & Popups)
+    function listenToSettings() {
+        db.collection('storeSettings').doc('global').onSnapshot(doc => {
+            if (doc.exists) {
+                const data = doc.data();
+                
+                // Red Alert Banner
+                if (data.redAlertActive && data.redAlertText) {
+                    document.getElementById('red-alert-text').innerText = data.redAlertText;
+                    document.getElementById('red-alert').classList.remove('hidden');
+                } else {
+                    document.getElementById('red-alert').classList.add('hidden');
+                }
+
+                // Instant Promo Popup
+                // Check local storage so we only show popup once per session/change
+                if (data.promoActive && localStorage.getItem('last_promo') !== data.promoTitle) {
+                    document.getElementById('popup-title').innerText = data.promoTitle || "Special Offer";
+                    document.getElementById('popup-text').innerText = data.promoText || "";
+                    
+                    if(data.promoImage) {
+                        const img = document.getElementById('popup-img');
+                        img.src = data.promoImage;
+                        img.classList.remove('hidden');
+                    }
+                    if(data.promoLink) {
+                        const link = document.getElementById('popup-link');
+                        link.href = data.promoLink;
+                        link.classList.remove('hidden');
+                    }
+                    
+                    document.getElementById('promo-popup').classList.remove('hidden');
+                    localStorage.setItem('last_promo', data.promoTitle); // Save to prevent spamming
+                }
+            }
+        });
+    }
+
+    function closePopup() { document.getElementById('promo-popup').classList.add('hidden'); }
+
+    // 3. Listen to Bills (Calculates Today's total & Pending)
+    function listenToBills() {
+        db.collection('bills').where('customerEmail', '==', currentUserEmail).onSnapshot(snapshot => {
+            const homeContainer = document.getElementById('home-statements');
+            const billsContainer = document.getElementById('full-bill-list');
+            
+            // Sort client-side to avoid needing complex Firestore Indexes immediately
+            let bills = [];
+            snapshot.forEach(doc => bills.push({ id: doc.id, ...doc.data() }));
+            bills.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+
+            if (bills.length === 0) {
+                homeContainer.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">No recent statements.</p>';
+                billsContainer.innerHTML = '<div class="text-center py-10"><i class="fa-solid fa-file-invoice text-4xl text-gray-300 mb-3"></i><p class="text-gray-400">No bills found.</p></div>';
+                return;
+            }
+
+            homeContainer.innerHTML = ''; 
+            billsContainer.innerHTML = '';
+            
+            let todayTotal = 0;
+            let todayCount = 0;
+            let totalPending = 0;
+
+            const today = new Date().toDateString();
+
+            bills.forEach((bill, index) => {
+                const dateObj = bill.createdAt ? bill.createdAt.toDate() : new Date();
+                const dateStr = dateObj.toLocaleDateString();
+                const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
+                // Analytics Math
+                if (dateObj.toDateString() === today) {
+                    todayTotal += Number(bill.amount);
+                    todayCount++;
+                }
+                if (bill.status === "Pending") totalPending += Number(bill.amount);
+
+                // Styling
+                const statusColor = bill.status === 'Paid' ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-200';
+                
+                const html = `
+                    <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <div class="h-10 w-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400">
+                                <i class="fa-solid fa-receipt"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-gray-800">${bill.id.substring(0,8).toUpperCase()}</p>
+                                <p class="text-[10px] text-gray-500"><i class="fa-regular fa-clock"></i> ${dateStr} • ${timeStr}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm font-bold text-gray-800">₹${bill.amount}</p>
+                            <span class="text-[9px] font-bold px-2 py-0.5 rounded border ${statusColor}">${bill.status}</span>
+                        </div>
+                    </div>
+                `;
+                
+                billsContainer.innerHTML += html;
+                if(index < 3) homeContainer.innerHTML += html; // Show top 3 on Home
+            });
+
+            // Update Dashboards
+            document.getElementById('today-total').innerText = `₹${todayTotal}`;
+            document.getElementById('today-count').innerText = todayCount;
+            document.getElementById('total-pending').innerText = `₹${totalPending}`;
+        });
+    }
+
+    // 4. Listen to Announcements
+    function listenToAnnouncements() {
+        db.collection('announcements').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+            const container = document.getElementById('announcement-list');
+            if (snapshot.empty) {
+                container.innerHTML = '<div class="text-center py-10"><i class="fa-solid fa-bullhorn text-4xl text-gray-300 mb-3"></i><p class="text-gray-400">No updates right now.</p></div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            snapshot.forEach(doc => {
+                const ann = doc.data();
+                const timeStr = ann.createdAt ? ann.createdAt.toDate().toLocaleDateString() : 'Recent';
+                
+                let imgHtml = ann.image ? `<img src="${ann.image}" class="w-full h-40 object-cover">` : '';
+                let linkHtml = ann.link ? `<a href="${ann.link}" target="_blank" class="text-blue-600 font-bold text-sm flex items-center gap-1 hover:underline mt-2">View Link <i class="fa-solid fa-arrow-right text-xs"></i></a>` : '';
+
+                container.innerHTML += `
+                    <div class="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                        ${imgHtml}
+                        <div class="p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="font-bold text-gray-800 text-lg">${ann.title}</h4>
+                                <span class="text-[10px] text-gray-400 whitespace-nowrap">${timeStr}</span>
+                            </div>
+                            <p class="text-sm text-gray-600">${ann.text}</p>
+                            ${linkHtml}
+                        </div>
+                    </div>
+                `;
+            });
+        });
+    }
+
+    // 5. Listen to Chat Messages
+    function listenToMessages() {
+        db.collection('messages')
+          .where('customerEmail', '==', currentUserEmail)
+          .onSnapshot(snapshot => {
+            const windowEl = document.getElementById('chat-window');
+            
+            let msgs = [];
+            snapshot.forEach(doc => msgs.push(doc.data()));
+            msgs.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0));
+
+            windowEl.innerHTML = '';
+            
+            // Welcome message
+            windowEl.innerHTML += `
+                <div class="flex justify-start">
+                    <div class="bg-white border border-gray-200 p-3 rounded-2xl rounded-tl-sm shadow-sm max-w-[80%] text-sm text-gray-700">
+                        Hello! How can we help you regarding your Khata or orders?
+                    </div>
+                </div>
+            `;
+
+            msgs.forEach(m => {
+                const isMe = m.sender === 'customer';
+                const time = m.createdAt ? m.createdAt.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                
+                if (isMe) {
+                    windowEl.innerHTML += `
+                        <div class="flex justify-end">
+                            <div class="bg-blue-600 text-white p-3 rounded-2xl rounded-tr-sm shadow-sm max-w-[80%] text-sm">
+                                ${m.text}
+                                <div class="text-[9px] text-blue-200 mt-1 text-right">${time}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    windowEl.innerHTML += `
+                        <div class="flex justify-start">
+                            <div class="bg-white border border-gray-200 p-3 rounded-2xl rounded-tl-sm shadow-sm max-w-[80%] text-sm text-gray-700">
+                                ${m.text}
+                                <div class="text-[9px] text-gray-400 mt-1 text-right">${time}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+            // Auto scroll to bottom
+            windowEl.scrollTop = windowEl.scrollHeight;
+        });
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('chat-input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        db.collection('messages').add({
+            customerEmail: currentUserEmail,
+            text: text,
+            sender: 'customer',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        input.value = '';
+    }
+
+    // UI Tab Switcher
+    function switchTab(tabName) {
+        document.querySelectorAll('.view-tab').forEach(el => el.classList.add('hidden'));
+        document.getElementById(`${tabName}-view`).classList.remove('hidden');
+
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            if(btn.dataset.target === tabName) {
+                btn.classList.add('text-blue-600');
+                btn.classList.remove('text-gray-400');
+            } else {
+                btn.classList.remove('text-blue-600');
+                btn.classList.add('text-gray-400');
+            }
+        });
+        window.scrollTo(0,0);
+        
+        // Scroll chat to bottom if opening chat
+        if(tabName === 'messages') {
+            const w = document.getElementById('chat-window');
+            w.scrollTop = w.scrollHeight;
+        }
+    }
+</script>
+</body>
+</html>
